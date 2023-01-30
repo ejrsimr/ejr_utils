@@ -1,0 +1,140 @@
+#!/usr/bin/env python3
+# fasta_retrieve
+# extract sequences from fasta file based on file of full or partial ids
+# ejr: 2022-10-12
+# lmd: 2022-11-17
+
+from fasta_utils import *
+import signal
+import argparse
+import fileinput
+
+###############################################################################
+### MAIN 
+###############################################################################
+def main():
+    args = get_args()
+    fasta = read_fasta(args.fasta)
+
+    # accept file of sequence names or a single name with -p
+    if args.file:
+        patterns = file_to_list(args.file)
+    else:
+        patterns = [ args.pattern ]
+
+    # for each type of search pass fasta dictionary, patterns list and T/F for 
+    # if you wish to exclude patterns.  True = exclude, False = include
+    if args.contains:
+        subset_fasta = subset_fasta_contains(fasta, patterns, args.exclude)
+    elif args.startswith:
+        subset_fasta = subset_fasta_startswith(fasta, patterns, args.exclude)
+    else:
+        subset_fasta = subset_fasta_is(fasta, patterns, args.exclude)
+
+    print_fasta(subset_fasta)
+
+###############################################################################
+### Get command-line arguments using argparse
+###############################################################################
+def get_args():
+    parser = argparse.ArgumentParser(description="Extract sequences from FASTA file")
+    # file defaults to stdin 
+    parser.add_argument('--fasta', type = argparse.FileType('r'), help = 'Input file of sequence names or partial names')
+    parser.add_argument('--exclude', help = 'Exclude instead of include sequences with pattern in name', action="store_true")
+
+    group1 = parser.add_mutually_exclusive_group()
+    group1.add_argument('-f', '--file', type = argparse.FileType('r'), help = 'Input file of sequence names or partial names')
+    group1.add_argument('-p', '--pattern', help = 'Single sequence name or partial name')
+
+    group2 = parser.add_mutually_exclusive_group()
+    group2.add_argument('--startswith', help = 'FASTA entries must START WITH strings in seq_list', action="store_true")
+    group2.add_argument('--contains', help = 'FASTA entries must CONTAIN string in seq_list', action="store_true")
+    args = parser.parse_args()
+
+    return args
+
+###############################################################################
+### Subset FASTA - require full header (fast) - returns FASTA dictionary
+###############################################################################    
+def subset_fasta_is(fasta, names_list, exclude):
+    # this is faster than pattern matching, but on big FASTA files, this
+    # will be a lot slower than indexed retrieval
+    fasta_out = {}
+
+    if exclude == True:
+        for header in fasta:
+            if header not in names_list: 
+                fasta_out[header] = fasta[header]
+
+    else:
+        for header in fasta:
+            if header in names_list:
+                fasta_out[header] = fasta[header]
+
+    return(fasta_out)
+
+###############################################################################
+### Subset FASTA - only startswith (slow) - returns FASTA dictionary
+###############################################################################    
+def subset_fasta_startswith(fasta, names_list, exclude):
+    fasta_out = {}
+
+    # for exclusions we need a full list and not just partials
+    match_list = []
+    for header in fasta:
+        for pattern in names_list:
+            if header.startswith(pattern):
+                match_list.append(header)
+
+    if exclude == True:
+        for header in fasta:
+            if header not in match_list:
+                fasta_out[header] = fasta[header]
+    else:
+        for header in match_list:
+            fasta_out[header] = fasta[header]
+
+    return(fasta_out)
+
+###############################################################################
+### Subset FASTA - contains (very slow) - returns FASTA dictionary
+###############################################################################    
+def subset_fasta_contains(fasta, names_list, exclude):
+    fasta_out = {}
+
+    # for exclusions we need a full list and not just partials
+    match_list = []
+    for header in fasta:
+        for pattern in names_list:
+            if pattern in header:
+                match_list.append(header)
+
+    if exclude == True:
+        for header in fasta:
+            if header not in match_list:
+                fasta_out[header] = fasta[header]
+    else:
+        for header in match_list:
+            fasta_out[header] = fasta[header]
+
+    return(fasta_out)
+
+###############################################################################
+### Read file of sequence names or partial names and return list
+###############################################################################
+def file_to_list(fh):
+    out_list = []
+
+    for line in fh:
+        line = line.rstrip()
+        out_list.append(line)
+
+    return out_list
+
+###############################################################################
+### RUN MAIN 
+###############################################################################
+if __name__ == "__main__":
+    # this catches sigpipe errors so you don't get an error message if you tail of head output
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    main()

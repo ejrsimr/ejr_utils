@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+# fasta_filter
+# Filter FASTA file by length and gc
+# ejr: 2022-11-17
+# lmd: 2022-11-17
+
+from fasta_utils import *
+import sys
+import argparse
+import signal
+
+###############################################################################
+### MAIN
+###############################################################################
+def main():
+    args = get_args()
+    fasta = read_fasta(args.file)
+    filtered_fasta = filter_fasta(fasta, args.min_len, args.max_len, args.min_gc, args.max_gc)
+    print_fasta(filtered_fasta)
+
+###############################################################################
+### Get command-line arguments using argparse
+###############################################################################
+def get_args():
+    parser = argparse.ArgumentParser(description="Filter sequences from FASTA")
+    # file defaults to stdin
+    parser.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, help = 'Input FASTA - defaults to STDIN')
+    parser.add_argument('--min_len', type = int, default = '1', help = 'Minimum sequence length')
+    parser.add_argument('--max_len', type = int, default = '10000000000', help = 'Maximum sequence length')
+    parser.add_argument('--min_gc',  type = float, default = '0', help = 'Minimum %GC')
+    parser.add_argument('--max_gc',  type = float, default = '1', help = 'Maximum %GC')
+    args = parser.parse_args()
+
+    return args
+
+###############################################################################
+### Filter FASTA File by length and gc content
+###############################################################################
+def filter_fasta(fasta, min_len, max_len, min_gc, max_gc):
+    fasta_out = {}
+
+    for header in fasta:
+        s_gc = calc_gc(fasta[header])
+        s_len = len(fasta[header])
+        if s_gc >= min_gc and s_gc <= max_gc and s_len >= min_len and s_len <= max_len:
+            fasta_out[header] = fasta[header]
+    
+    return fasta_out
+
+###############################################################################
+### RUN MAIN
+###############################################################################
+if __name__ == "__main__":
+    # this catches sigpipe errors so you don't get an error message if you tail of head output
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    main()

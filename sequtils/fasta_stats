@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+# fasta_stats
+# print table of FASTA file statistics
+# ejr: 2022-11-16
+# lmd: 2022-11-17
+
+from fasta_utils import *
+import sys
+import fileinput
+import signal
+
+###############################################################################
+### MAIN 
+###############################################################################
+def main():
+    fh = fileinput.input()
+    fasta = read_fasta(fh)
+    print_fasta_stats(fasta)
+    
+###############################################################################
+### Get command-line arguments using argparse
+###############################################################################
+def get_args():
+    parser = argparse.ArgumentParser(description="Output FASTA Statistics")
+    # file defaults to stdin 
+    parser.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, help = 'Input FASTA - defaults to STDIN')
+    args = parser.parse_args()
+
+    return args
+
+###############################################################################
+### Print out FASTA statistics
+###############################################################################
+def print_fasta_stats(fasta):
+    num_bases = 0
+    num_seqs = 0 
+    total_gc = 0
+    total_at = 0
+    total_n = 0
+    longest_seq = 0
+    shortest_seq = 1000000000
+    seq_lengths = []
+
+    for header in fasta:
+        seq = fasta[header].upper()
+        slen = len(seq)
+        seq_lengths.append(slen)
+        g = seq.count('G')
+        c = seq.count('C')
+        a = seq.count('A')
+        t = seq.count('T')
+        n = seq.count('N')
+        gc = g + c
+        at = a + t
+        # add lengths together for number of bases
+        num_bases += slen
+        # count number of sequences
+        num_seqs += 1
+        # track total number of bases of each type
+        total_gc += gc
+        total_at += at
+        total_n += n
+        # track longest and shortest sequence
+        if (slen < shortest_seq):
+            shortest_seq = slen
+        if (slen > longest_seq):
+            longest_seq = slen
+
+    average_length = float(num_bases) / float(num_seqs)
+    percent_gc = float(total_gc) / (float(total_gc) + float(total_at))
+    percent_n = float(total_n) / float(num_bases)
+    sorted_lengths = sorted(seq_lengths, reverse=True)
+    fifty = float(num_bases * .5)
+    ninety = float(num_bases *.9)
+
+    running_total = 0
+    n50 = 0
+    n90 = 0
+    for length in sorted_lengths:
+        running_total += length
+        if (running_total < fifty):
+            n50 = length
+        if (running_total < ninety):
+            n90 = length
+
+    # Average is a floating point number, convert to integer
+    average_length = int(round(average_length, 0))
+
+    output = """
+|                      |            |
+|:-------------------- |-----------:|
+| Number of Sequences: | {: >10,} |
+| Total Length:        | {: >10,} |
+| Average Length:      | {: >10,} |
+| Longest Sequence:    | {: >10,} |
+| Shortest Sequence:   | {: >10,} |
+| Percent GC:          | {: >10.0%} |
+| Percent N:           | {: >10.0%} |
+| N50:                 | {: >10,} |
+| N90:                 | {: >10,} |
+"""
+    print(output.format(
+    num_seqs,
+    num_bases,
+    average_length,
+    longest_seq,
+    shortest_seq,
+    percent_gc,
+    percent_n,
+    n50,
+    n90))
+
+###############################################################################
+### RUN MAIN 
+###############################################################################
+if __name__ == "__main__":
+
+    # this catches sigpipe errors so you don't get an error message if you tail of head output
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    main()

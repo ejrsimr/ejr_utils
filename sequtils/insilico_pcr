@@ -1,0 +1,127 @@
+#!/usr/bin/env python3
+# insilico_pcr
+# search through fasta file for primer pairs and return coordinates
+# regardless of primer length a match = 15bp. (this is the requirement from Jim Kents UCSC version)
+# ejr: 2023-01-23
+# lmd: 2023-01-23
+
+import sys
+import argparse
+import signal
+
+###############################################################################
+### MAIN 
+###############################################################################
+def main():
+    args = get_args()
+    fasta = read_fasta(args.file)
+    bed = primer_search(fasta, args.left_primer, args.right_primer, args.max_size)
+    print_bed(bed)
+
+###############################################################################
+### Get command-line arguments using argparse
+###############################################################################
+def get_args():
+    parser = argparse.ArgumentParser(description="Align primers to genome and retrieve product")
+    # file defaults to stdin
+    parser.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, help = 'Reference FASTA (genome or transcriptome) - defaults to STDIN')
+    parser.add_argument('--left_primer', type = str, default = '0', help = 'Left primer sequence')
+    parser.add_argument('--right_primer', type = str, default = '0', help = 'Right primer sequence')
+    parser.add_argument('--max_size', type = str, default = '10000', help = 'Maximum distance between primers')
+    args = parser.parse_args()
+    return args
+
+###############################################################################
+### Search FASTA for primers
+###############################################################################
+def primer_search(fasta, left_primer, right_primer, max_size): 
+    bed = {} # contain amplification fragments
+    left_bed = {} # contains just left primer matches
+
+    ###### ALIGN LEFT PRIMERS ######
+    for header in fasta:
+        seqlen = len(fasta[header])
+        left_len = len(left_primer)
+
+        # scan sequence in primer size windows (step 1)
+        for i in range(seqlen - left_len):
+            matches = sum(a==b for a, b in zip(left_primer, fasta[header][i:i+left_len]))
+            if matches >= 15:
+                name = header + ":" + str(i) + "-" + str(i + left_len)
+                left_bed[name] = {}
+                left_bed[name]['start'] = str(i)
+                left_bed[name]['end'] = str(i + left_len)
+                left_bed[name]['chr'] = header
+                left_bed[name]['strand'] = "+"
+                left_bed[name]['score'] = matches
+
+        # scan reverse-complement of sequence in primer size windows (step 1)
+        rc = reverse_complement(fasta[header])
+
+        for i in range(seqlen - left_len):
+            matches = sum(a==b for a, b in zip(left_primer, rc[header][i:i+left_len]))
+            if matches >= 15:
+                name = header + ":" + str(seqlen - i) + "-" + str(i)
+                left_bed[name] = {}
+                left_bed[name]['start'] = str(seqlen - i)
+                left_bed[name]['end'] = str(i)
+                left_bed[name]['chr'] = header
+                left_bed[name]['strand'] = "-"
+                left_bed[name]['score'] = matches
+
+    ###### ALIGN RIGHT PRIMERS ######
+    # for every left primer match we want to look Nbp downstream for a right match
+    right_len = len(right_primer)
+    for name in left_bed:
+        
+        if left_bed[name]['strand'] == "+":
+            # forward matches
+            for i in range(left_bed[name]['start'], left_bed[name]['start'] + max_size):
+                matches = sum(a==b for a, b in zip(right_primer, fasta[left_bed[name]['chr']][i:i+right_len]))
+                if matches >= 15:
+                    name = left_bed[name]['chr'] + ":" + left_bed[name]['start'] + "-" + str(i)
+                    bed[name] = {}
+                    bed[name]['start'] =  left_bed[name]['start']
+                    bed[name]['end'] = str(i)
+                    bed[name]['chr'] = left_bed[name]['chr']
+                    bed[name]['strand'] = "+"
+                    bed[name]['score'] = matches
+            # do this               
+        if left_bed[name]['strand'] == "-":
+            rc = reverse_complement(fasta[left_bed[name]['chr']])
+            for i in range(left_bed[name]['start'] - max_size, left_bed[name]['start']):
+                matches = sum(a==b for a, b in zip(right_primer, rc[i:i+right_len]))
+                if matches >= 15:
+                    name = left_bed[name]['chr'] + ":" + str(i) + "-" + left_bed[name]['start']
+                    bed[name] = {}
+                    bed[name]['start'] =  str(i)
+                    bed[name]['end'] = left_bed[name]['start']
+                    bed[name]['chr'] = left_bed[name]['chr']
+                    bed[name]['strand'] = "-"
+                    bed[name]['score'] = matches
+
+    return(bed)
+
+###############################################################################
+# Reverse Complement Sequence
+###############################################################################
+def reverse_complement(seq):
+    # complement sequence
+    bases = str.maketrans('AGCTagct','TCGAtcga')
+    # reverse sequences; return
+    return seq.translate(bases)[::-1]
+
+###############################################################################
+### Print BED Dictionary as BED to STDOUT
+###############################################################################
+def print_bed(bed): 
+    for name in bed:
+        print("\t".join([bed[name]['chr'], bed[name]['start'], bed[name]['end'], name, bed[name]['score'], bed[name]['strand']]))
+
+###############################################################################
+### RUN MAIN 
+###############################################################################
+if __name__ == "__main__":
+    # this catches sigpipe errors so you don't get an error message if you tail of head output
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    main()

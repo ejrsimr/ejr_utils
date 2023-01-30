@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+# fasta_regex
+# search through fasta file for regular expression and output either a bed file or fasta file
+# ejr: 2022-09-27
+# lmd: 2022-11-16
+
+from fasta_utils import *
+import sys
+import argparse
+import signal
+
+###############################################################################
+### MAIN 
+###############################################################################
+def main():
+    args = get_args()
+    fasta = read_fasta(args.file)
+    bed = grep_regex(fasta, args.regex)
+    print_bed(bed)
+
+###############################################################################
+### Get command-line arguments using argparse
+###############################################################################
+def get_args():
+    parser = argparse.ArgumentParser(description="Grep sequence from FASTA")
+    # file defaults to stdin
+    parser.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, help = 'Input FASTA - defaults to STDIN')
+    parser.add_argument('--regex', type = str, default = '0', help = 'Regular expression to search for')
+    args = parser.parse_args()
+
+    return args
+
+###############################################################################
+### GREP FASTA for REGEX - save into BED dictionary
+###############################################################################
+def grep_regex(fasta, regex):
+    bed = {}
+    for header in fasta:
+        seqlen = len(fasta[header])
+        # forward matches
+        for match in finditer(regex, fasta[header]):
+            name = header + ":" + str(match.start()) + "-" + str(match.end()) + ":+"
+            bed[name] = {}
+            bed[name]['start'] = str(match.start())
+            bed[name]['end'] = str(match.end())
+            bed[name]['chr'] = header
+            bed[name]['strand'] = "+"
+            bed[name]['score'] = "0"
+
+        # reverse complement matches
+        rc = reverse_complement(fasta[header])
+        for match in finditer(regex, rc):
+            name = header + ":" + str(seqlen - match.end()) + "-" + str(seqlen - match.start()) + ":-"
+            bed[name] = {}
+            bed[name]['start'] = str(seqlen - match.end())
+            bed[name]['end'] = str(seqlen - match.start())
+            bed[name]['chr'] = header
+            bed[name]['strand'] = "-"
+            bed[name]['score'] = "0"
+
+    return(bed)
+
+###############################################################################
+### Print BED Dictionary as BED to STDOUT
+###############################################################################
+def print_bed(bed): 
+    for name in bed:
+        print("\t".join([bed[name]['chr'], bed[name]['start'], bed[name]['end'], name, bed[name]['score'], bed[name]['strand']]))
+
+###############################################################################
+### RUN MAIN 
+###############################################################################
+if __name__ == "__main__":
+    # this catches sigpipe errors so you don't get an error message if you tail of head output
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    main()
