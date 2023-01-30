@@ -3,7 +3,7 @@
 # search through fasta file for primer pairs and return coordinates
 # regardless of primer length a match = 15bp. (this is the requirement from Jim Kents UCSC version)
 # ejr: 2023-01-23
-# lmd: 2023-01-23
+# lmd: 2023-01-30
 
 import sys
 import argparse
@@ -27,7 +27,7 @@ def get_args():
     parser.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, help = 'Reference FASTA (genome or transcriptome) - defaults to STDIN')
     parser.add_argument('--left_primer', type = str, default = '0', help = 'Left primer sequence')
     parser.add_argument('--right_primer', type = str, default = '0', help = 'Right primer sequence')
-    parser.add_argument('--max_size', type = str, default = '10000', help = 'Maximum distance between primers')
+    parser.add_argument('--max_size', type = int, default = '10000', help = 'Maximum distance between primers')
     args = parser.parse_args()
     return args
 
@@ -49,8 +49,8 @@ def primer_search(fasta, left_primer, right_primer, max_size):
             if matches >= 15:
                 name = header + ":" + str(i) + "-" + str(i + left_len)
                 left_bed[name] = {}
-                left_bed[name]['start'] = str(i)
-                left_bed[name]['end'] = str(i + left_len)
+                left_bed[name]['start'] = i
+                left_bed[name]['end'] = i + left_len
                 left_bed[name]['chr'] = header
                 left_bed[name]['strand'] = "+"
                 left_bed[name]['score'] = matches
@@ -59,12 +59,12 @@ def primer_search(fasta, left_primer, right_primer, max_size):
         rc = reverse_complement(fasta[header])
 
         for i in range(seqlen - left_len):
-            matches = sum(a==b for a, b in zip(left_primer, rc[header][i:i+left_len]))
+            matches = sum(a==b for a, b in zip(left_primer, rc[i:i+left_len]))
             if matches >= 15:
                 name = header + ":" + str(seqlen - i) + "-" + str(i)
                 left_bed[name] = {}
-                left_bed[name]['start'] = str(seqlen - i)
-                left_bed[name]['end'] = str(i)
+                left_bed[name]['start'] = seqlen - i
+                left_bed[name]['end'] = i
                 left_bed[name]['chr'] = header
                 left_bed[name]['strand'] = "-"
                 left_bed[name]['score'] = matches
@@ -72,33 +72,35 @@ def primer_search(fasta, left_primer, right_primer, max_size):
     ###### ALIGN RIGHT PRIMERS ######
     # for every left primer match we want to look Nbp downstream for a right match
     right_len = len(right_primer)
+    right_primer = reverse_complement(right_primer)
     for name in left_bed:
-        
         if left_bed[name]['strand'] == "+":
             # forward matches
             for i in range(left_bed[name]['start'], left_bed[name]['start'] + max_size):
                 matches = sum(a==b for a, b in zip(right_primer, fasta[left_bed[name]['chr']][i:i+right_len]))
+
                 if matches >= 15:
-                    name = left_bed[name]['chr'] + ":" + left_bed[name]['start'] + "-" + str(i)
-                    bed[name] = {}
-                    bed[name]['start'] =  left_bed[name]['start']
-                    bed[name]['end'] = str(i)
-                    bed[name]['chr'] = left_bed[name]['chr']
-                    bed[name]['strand'] = "+"
-                    bed[name]['score'] = matches
-            # do this               
+                    print(rc[i:i+right_len])
+                    right_name = left_bed[name]['chr'] + ":" + str(left_bed[name]['start']) + "-" + str(i+right_len)
+                    bed[right_name] = {}
+                    bed[right_name]['start'] =  left_bed[name]['start']
+                    bed[right_name]['end'] = i + right_len
+                    bed[right_name]['chr'] = left_bed[name]['chr']
+                    bed[right_name]['strand'] = "+"
+                    bed[right_name]['score'] = matches
+        rc = reverse_complement(fasta[header])   
         if left_bed[name]['strand'] == "-":
-            rc = reverse_complement(fasta[left_bed[name]['chr']])
-            for i in range(left_bed[name]['start'] - max_size, left_bed[name]['start']):
+            for i in range(left_bed[name]['start'], left_bed[name]['start'] + max_size - right_len):
                 matches = sum(a==b for a, b in zip(right_primer, rc[i:i+right_len]))
                 if matches >= 15:
-                    name = left_bed[name]['chr'] + ":" + str(i) + "-" + left_bed[name]['start']
-                    bed[name] = {}
-                    bed[name]['start'] =  str(i)
-                    bed[name]['end'] = left_bed[name]['start']
-                    bed[name]['chr'] = left_bed[name]['chr']
-                    bed[name]['strand'] = "-"
-                    bed[name]['score'] = matches
+                    right_name = left_bed[name]['chr'] + ":" + str(i+right_len) + "-" + str(left_bed[name]['start'])
+                    bed[right_name] = {}
+                    bed[right_name]['start'] =  i+right_len
+                    bed[right_name]['end'] = left_bed[name]['start'] + left_len
+                    bed[right_name]['chr'] = left_bed[name]['chr']
+                    bed[right_name]['strand'] = "-"
+                    bed[right_name]['score'] = matches
+#    bed = left_bed
 
     return(bed)
 
@@ -112,16 +114,37 @@ def reverse_complement(seq):
     return seq.translate(bases)[::-1]
 
 ###############################################################################
+### Read FASTA filehandle into dictionary
+###############################################################################
+def read_fasta(fh):
+    header = ""
+    fasta = {}
+
+    for line in fh:
+        line = line.rstrip()
+        # starts with handles blank lines better than line[0]
+        if (line.startswith(">")):
+            header = line[1:]
+            fasta[header] = []
+        else:
+            fasta[header].append(line)
+    # append is more efficient that string concatenation
+    for header in fasta:
+        fasta[header] = ''.join(fasta[header])
+
+    return fasta
+
+###############################################################################
 ### Print BED Dictionary as BED to STDOUT
 ###############################################################################
 def print_bed(bed): 
     for name in bed:
-        print("\t".join([bed[name]['chr'], bed[name]['start'], bed[name]['end'], name, bed[name]['score'], bed[name]['strand']]))
+        print("\t".join([bed[name]['chr'], str(bed[name]['start']), str(bed[name]['end']), name, str(bed[name]['score']), bed[name]['strand']]))
 
 ###############################################################################
 ### RUN MAIN 
 ###############################################################################
 if __name__ == "__main__":
     # this catches sigpipe errors so you don't get an error message if you tail of head output
-    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+    signal.signal(signal.SIGFPE, signal.SIG_DFL)
     main()
