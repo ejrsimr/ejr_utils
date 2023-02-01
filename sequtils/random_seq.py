@@ -3,7 +3,6 @@
 # lmd: 2023-02-01
 # generate random sequences with a given gc content
 
-
 import sys
 import argparse
 import signal
@@ -23,6 +22,9 @@ def main():
     fasta = generate_sequence(letters, args.l)
     print_fasta(fasta)
 
+###############################################################################
+### Generate random sequence with given nucleotide content
+###############################################################################
 def generate_sequence(letters, seqlen):
     # https://stackoverflow.com/questions/21205836/generating-random-sequences-of-dna
     # we are randomly selecting seqlen letters from letters string.
@@ -34,7 +36,6 @@ def generate_sequence(letters, seqlen):
     fasta = {}
     fasta[header] = sequence
     return(fasta)
-
 
 ###############################################################################
 ### Get command-line arguments using argparse
@@ -58,7 +59,6 @@ def print_fasta(fasta):
     for header in fasta:
         print(">", header, sep="")
         print(insert_newlines(fasta[header]))
-
 
 ###############################################################################
 ### Add newlines every 80 characters for FASTA formatting
