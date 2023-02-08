@@ -20,17 +20,34 @@ def main():
     input_obo_file = sys.argv[1] # the input gene ontology file eg. gene_ontology.WS238.obo
     input_term = sys.argv[2] # the input GO term of interest
 
-    # read in the children of each GO term in the GO hierachy:
+    # read in GO OBO:
     go = initiate_go_dict(input_obo_file)
 
-    print(go[input_term])
+    # create children lookup
+
+    children = initiate_children(go)
+    
+    #print(go[input_term])
     # find all the descendants of the term 'input_go_term':
-    descendants = find_all_descendants(input_term, go)
+    descendants = find_all_descendants(input_term, children)
 
     # print results
     for descendant in descendants:
-        print(descendant, ": ", go[descendant]['name'])
+        print(descendant, "\t", go[descendant]['name'])
 
+def initiate_children(go):
+    # we want to create an inverse dictionary in which every child term in the go dict
+    # can look up the parent
+    children = {}
+
+    for term in go:
+        for type in go[term]:
+            for child in go[term][type]:
+                if child not in children:
+                    children[child] = {}
+                children[child][term] = type          
+        
+    return(children)
     
 def initiate_go_dict(input_obo_file):
     go = {}
@@ -65,7 +82,7 @@ def initiate_go_dict(input_obo_file):
                     split_temp = re.split(r' ', value)
                     field = split_temp[0]
                     value = split_temp[1]    
-                    print("x" + field + "x\tx" + value + "x")
+                    #print("x" + field + "x\tx" + value + "x")
                     go[current_id][field].append(value) 
 
     return go
@@ -73,25 +90,17 @@ def initiate_go_dict(input_obo_file):
 
 
 # define a function to find all descendants of a GO term in the GO hierarchy:
-def find_all_descendants(input_go_term, go):
+def find_all_descendants(input_go_term, children):
 
     descendants = set()
     queue = []
     queue.append(input_go_term)
     while queue:
         node = queue.pop(0)
-        if node in go and node not in descendants: # don't visit a second time
-            node_children = go[node]['is_a']
-    #        print(node_children)
+        if node in children and node not in descendants: # don't visit a second time
+            node_children = children[node].keys()
             queue.extend(node_children)
-            node_children = go[node]['part_of']
-            queue.extend(node_children)
-            node_children = go[node]['regulates']
-            queue.extend(node_children)
-            node_children = go[node]['positively_regulates']
-            queue.extend(node_children)
-            node_children = go[node]['negatively_regulates']
-            queue.extend(node_children)
+
         descendants.add(node)
 
     return descendants 
