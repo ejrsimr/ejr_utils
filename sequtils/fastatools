@@ -3,13 +3,10 @@
 # lmd: 2023-02-22
 # General purpose fasta manipulation suite
 
-import os
 import sys
-import re
-from re import finditer
 import argparse
-import fileinput
 import signal
+import matplotlib.pyplot as plt
 
 def main():
     get_args()
@@ -100,6 +97,23 @@ def fasta_stats(args):
     n90))
 
 ###############################################################################
+### Filter FASTA File by length and gc content
+###############################################################################
+def filter_fasta(args):
+    fasta = read_fasta(args.file)
+    fasta_out = {}
+
+    for header, seq in fasta.items():
+        s_gc = calc_gc(seq) * 100
+        s_len = len(seq)
+        if s_gc >= args.gc_min and s_gc <= args.gc_max and s_len >= args.len_min and s_len <= args.len_max:
+            fasta_out[header] = seq
+    
+    print_fasta(fasta_out)
+
+
+
+###############################################################################
 ### Read FASTA filehandle into dictionary
 ###############################################################################
 def read_fasta(fh):
@@ -153,12 +167,13 @@ def print_fasta(fasta):
 ###############################################################################    
 def calc_gc(seq):
     useq = seq.upper()
-    g = useq.count('G')
-    c = useq.count('C')
-    a = useq.count('A')
-    t = useq.count('T')
-    if g + c + a + t > 0: 
-        perc_gc = (g + c) / (g + c + a + t)
+    g_count = useq.count('G')
+    c_count = useq.count('C')
+    a_count = useq.count('A')
+    t_count = useq.count('T')
+
+    if g_count + c_count + a_count + t_count > 0: 
+        perc_gc = (g_count + c_count) / (g_count + c_count + a_count + t_count)
     else:
         perc_gc = 0
     return(perc_gc)
@@ -172,6 +187,134 @@ def print_gc_table(fasta):
     for header in fasta:
         gc = calc_gc(fasta[header]) * 100 
         print(header, "\t%0.2f" % gc)
+
+###############################################################################
+# Print table from FASTA files
+###############################################################################
+def fasta2table(args):
+    fasta = read_fasta(args.file)
+    if args.gc:
+        print_gc_table(fasta)
+    elif args.len:
+        print_lengths_table(fasta)
+    else:
+        print_seq_table(fasta)
+
+
+###############################################################################
+# Print table of sequences
+###############################################################################
+def print_seq_table(fasta):
+    print("seq_id\tseq")
+
+    for header in fasta:
+        seq = fasta[header].upper()
+        header = header[1:]
+        print(header, "\t", seq)
+
+###############################################################################
+# Print table of sequence lengths
+###############################################################################
+def print_lengths_table(fasta):
+    print("seq_id\tseq_length")
+
+    for header in fasta:
+        seq = fasta[header].upper()
+        slen = len(seq)
+        print(header, "\t", slen)
+
+###############################################################################
+# Print table of GC content
+###############################################################################
+def print_gc_table(fasta):
+    print("seq_id\tseq_gc")
+
+    for header in fasta:
+        seq = fasta[header].upper()
+        slen = float(len(seq))
+        g = float(seq.count('G'))
+        c = float(seq.count('C'))
+        gc = (g + c) / slen * 100
+        print(header, "\t%0.2f" % gc)
+
+###############################################################################
+# histogram from FASTA file
+###############################################################################
+def fasta2histogram(args):
+
+    fasta = read_fasta(args.file)
+    if args.gc:
+        if args.title:
+            title = args.title
+        else:
+            title = "%GC histogram"
+        gc_histogram(fasta, title)
+    else:
+        if args.title:
+            title = args.title
+        else:
+            title = "Length histogram"
+        length_histogram(fasta, title)
+
+###############################################################################
+# GC histogram
+###############################################################################
+def gc_histogram(fasta, title):
+
+    plot_list = []
+    # gc
+    for header in fasta:
+        seq = fasta[header].upper()
+        slen = float(len(seq))
+        g = float(seq.count('G'))
+        c = float(seq.count('C'))
+        gc = (g + c) / slen * 100
+        plot_list.append(gc)
+
+    n_bins = 101
+ 
+    #   Creating histogram
+    fig, axs = plt.subplots(1, 1,
+                        figsize =(10, 7),
+                        tight_layout = True)
+ 
+    axs.hist(plot_list, bins = n_bins)
+    plt.xlabel("%GC")
+    plt.ylabel("# sequences")
+    plt.title(title)
+    plt.xlim(0,100)
+ 
+    # Show plot
+    plt.savefig("gc_histogram.png")
+
+
+ ###############################################################################
+# Sequence lengths histogram
+###############################################################################
+def length_histogram(fasta, title):
+
+    plot_list = []
+    # gc
+    for seq in fasta.values():
+        plot_list.append(len(seq))
+
+    max_len = max(plot_list)
+    min_len = min(plot_list)
+    n_bins = 100
+ 
+    #   Creating histogram
+    fig, axs = plt.subplots(1, 1,
+                        figsize =(10, 7),
+                        tight_layout = True)
+ 
+    axs.hist(plot_list, bins = n_bins)
+    plt.xlabel("length")
+    plt.ylabel("# sequences")
+    plt.title(title)
+    plt.xlim(min_len,max_len)
+ 
+    # Show plot
+    plt.savefig("length_histogram.png")   
 
 ###############################################################################
 ### Get command-line arguments using argparse
@@ -188,6 +331,8 @@ def get_args():
 
     # create the parser for the "filter" command
     parser_filter = subparsers.add_parser('filter', help='filter help')
+    parser_filter.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, 
+        help = 'Input FASTA - defaults to STDIN')
     parser_filter.add_argument('--len_min', type = int, default = '0',
         help = 'Minimum sequence length to retain')
     parser_filter.add_argument('--len_max', type = int, default = '10000000',
@@ -196,22 +341,27 @@ def get_args():
         help = 'Minimum sequence GC percentage to retain (20 = .20)')
     parser_filter.add_argument('--gc_max', type = int, default = '100',
         help = 'Maximum sequence GC percentage to retain (60 = .60)')
-#    parser_filter.set_defaults(func=filter_fasta)
+    parser_filter.set_defaults(func=filter_fasta)
 
     # create the parser for the "table" command
     parser_table = subparsers.add_parser('table', help='table help')
+    parser_table.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, 
+        help = 'Input FASTA - defaults to STDIN')
     table_group = parser_table.add_mutually_exclusive_group()
     table_group.add_argument('--gc',  help = 'Output Table of GC Content', action="store_true")
     table_group.add_argument('--len', help = 'Output Table of Sequence Length', action="store_true")
     table_group.add_argument('--seq', help = 'Output Table of Sequences', action="store_true")
-#    parser_table.set_defaults(func=fasta2table)
+    parser_table.set_defaults(func=fasta2table)
 
     # create the parser for the "histogram" command
     parser_hist = subparsers.add_parser('histogram', help='histogram help')
+    parser_hist.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, 
+        help = 'Input FASTA - defaults to STDIN')
+    parser_hist.add_argument('--title', type=str)
     hist_group = parser_hist.add_mutually_exclusive_group()
     hist_group.add_argument('--gc',  help = 'Output Table of GC Content', action="store_true")
     hist_group.add_argument('--len', help = 'Output Table of Sequence Length', action="store_true")
-#    parser_hist.set_defaults(func=fasta2histogram)
+    parser_hist.set_defaults(func=fasta2histogram)
 
     args = parser.parse_args()
     args.func(args)
