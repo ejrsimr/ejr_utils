@@ -9,7 +9,8 @@ import re
 from re import finditer
 
 def main():
-    print("It Ran")
+    args = get_args()
+    fasta = read_fasta(args.file)
 
 ###############################################################################
 ### Read FASTA filehandle into dictionary
