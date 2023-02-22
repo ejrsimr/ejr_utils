@@ -8,10 +8,96 @@ import sys
 import re
 from re import finditer
 import argparse
+import fileinput
+import signal
 
 def main():
-    args = get_args()
+    get_args()
+    
+###############################################################################
+### Printout FASTA Statistics
+###############################################################################
+def fasta_stats(args):
+
     fasta = read_fasta(args.file)
+
+    num_bases = 0
+    num_seqs = 0 
+    total_gc = 0
+    total_at = 0
+    total_n = 0
+    longest_seq = 0
+    shortest_seq = 1000000000
+    seq_lengths = []
+
+    for value in fasta.values():
+        seq = value.upper()
+        slen = len(seq)
+        seq_lengths.append(slen)
+        g_count = seq.count('G')
+        c_count = seq.count('C')
+        a_count = seq.count('A')
+        t_count = seq.count('T')
+        n_count = seq.count('N')
+        gc_count = g_count + c_count
+        at_count = a_count + t_count
+        # add lengths together for number of bases
+        num_bases += slen
+        # count number of sequences
+        num_seqs += 1
+        # track total number of bases of each type
+        total_gc += gc_count
+        total_at += at_count
+        total_n += n_count
+        # track longest and shortest sequence
+        if slen < shortest_seq:
+            shortest_seq = slen
+        if slen > longest_seq:
+            longest_seq = slen
+
+    average_length = float(num_bases) / float(num_seqs)
+    percent_gc = float(total_gc) / (float(total_gc) + float(total_at))
+    percent_n = float(total_n) / float(num_bases)
+    sorted_lengths = sorted(seq_lengths, reverse=True)
+    fifty = float(num_bases * .5)
+    ninety = float(num_bases *.9)
+
+    running_total = 0
+    n50 = 0
+    n90 = 0
+    for length in sorted_lengths:
+        running_total += length
+        if running_total < fifty:
+            n50 = length
+        if running_total < ninety:
+            n90 = length
+
+    # Average is a floating point number, convert to integer
+    average_length = int(round(average_length, 0))
+
+    output = """
+|                      |            |
+|:-------------------- |-----------:|
+| Number of Sequences: | {: >10,} |
+| Total Length:        | {: >10,} |
+| Average Length:      | {: >10,} |
+| Longest Sequence:    | {: >10,} |
+| Shortest Sequence:   | {: >10,} |
+| Percent GC:          | {: >10.0%} |
+| Percent N:           | {: >10.0%} |
+| N50:                 | {: >10,} |
+| N90:                 | {: >10,} |
+"""
+    print(output.format(
+    num_seqs,
+    num_bases,
+    average_length,
+    longest_seq,
+    shortest_seq,
+    percent_gc,
+    percent_n,
+    n50,
+    n90))
 
 ###############################################################################
 ### Read FASTA filehandle into dictionary
@@ -92,18 +178,25 @@ def print_gc_table(fasta):
 ###############################################################################
 def get_args():
     parser = argparse.ArgumentParser(description="Manipulate FASTA Files")
-    parser.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, help = 'Input FASTA - defaults to STDIN')
-    subparsers = parser.add_subparsers(help='sub-command help') 
+    subparsers = parser.add_subparsers(help='sub-command help', required=True)
 
     # create the parser for the "stats" command
-    subparsers.add_parser('stats', help='stats help')
+    parser_stats = subparsers.add_parser('stats', help='stats help')
+    parser_stats.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, 
+        help = 'Input FASTA - defaults to STDIN')
+    parser_stats.set_defaults(func=fasta_stats)
 
     # create the parser for the "filter" command
     parser_filter = subparsers.add_parser('filter', help='filter help')
-    parser_filter.add_argument('--len_min', type = int, default = '0', help = 'Minimum sequence length to retain')
-    parser_filter.add_argument('--len_max', type = int, default = '10000000', help = 'Maximum sequence length to retain')
-    parser_filter.add_argument('--gc_min', type = int, default = '0', help = 'Minimum sequence GC percentage to retain (20 = .20)')
-    parser_filter.add_argument('--gc_max', type = int, default = '100', help = 'Maximum sequence GC percentage to retain (60 = .60)')
+    parser_filter.add_argument('--len_min', type = int, default = '0',
+        help = 'Minimum sequence length to retain')
+    parser_filter.add_argument('--len_max', type = int, default = '10000000',
+        help = 'Maximum sequence length to retain')
+    parser_filter.add_argument('--gc_min', type = int, default = '0',
+        help = 'Minimum sequence GC percentage to retain (20 = .20)')
+    parser_filter.add_argument('--gc_max', type = int, default = '100',
+        help = 'Maximum sequence GC percentage to retain (60 = .60)')
+#    parser_filter.set_defaults(func=filter_fasta)
 
     # create the parser for the "table" command
     parser_table = subparsers.add_parser('table', help='table help')
@@ -111,22 +204,22 @@ def get_args():
     table_group.add_argument('--gc',  help = 'Output Table of GC Content', action="store_true")
     table_group.add_argument('--len', help = 'Output Table of Sequence Length', action="store_true")
     table_group.add_argument('--seq', help = 'Output Table of Sequences', action="store_true")
+#    parser_table.set_defaults(func=fasta2table)
 
     # create the parser for the "histogram" command
     parser_hist = subparsers.add_parser('histogram', help='histogram help')
     hist_group = parser_hist.add_mutually_exclusive_group()
     hist_group.add_argument('--gc',  help = 'Output Table of GC Content', action="store_true")
     hist_group.add_argument('--len', help = 'Output Table of Sequence Length', action="store_true")
-
+#    parser_hist.set_defaults(func=fasta2histogram)
 
     args = parser.parse_args()
-
+    args.func(args)
     return args
-
-
 
 ###############################################################################
 # Run MAIN
 ###############################################################################
 if __name__ == "__main__":
+    signal.signal(signal.SIGPIPE, signal.SIG_DFL)
     main()
