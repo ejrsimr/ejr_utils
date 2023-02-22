@@ -1,0 +1,130 @@
+#!/usr/bin/env python3
+# ejr: 2023-02-22
+# lmd: 2023-02-22
+# General purpose fasta manipulation suite
+
+import os
+import sys
+import re
+from re import finditer
+
+def main():
+    print("It Ran")
+
+###############################################################################
+### Read FASTA filehandle into dictionary
+###############################################################################
+def read_fasta(fh):
+    header = ""
+    fasta = {}
+
+    for line in fh:
+        line = line.rstrip()
+        # starts with handles blank lines better than line[0]
+        if (line.startswith(">")):
+            header = line[1:]
+            fasta[header] = []
+        else:
+            fasta[header].append(line)
+    # append is more efficient that string concatenation
+    for header in fasta:
+        fasta[header] = ''.join(fasta[header])
+
+    return fasta
+
+###############################################################################
+### Add newlines every 80 characters for FASTA formatting
+###############################################################################
+def insert_newlines(string, every=80):
+    lines = []
+
+    for i in range(0, len(string), every):
+        lines.append(string[i:i+every])
+
+    return '\n'.join(lines)
+
+###############################################################################
+# Reverse Complement Sequence
+###############################################################################
+def reverse_complement(seq):
+    # complement sequence
+    bases = str.maketrans('AGCTagct','TCGAtcga')
+    # reverse sequences; return
+    return seq.translate(bases)[::-1]
+
+###############################################################################
+# Print FASTA Dictionary as FASTA to STDOUT
+###############################################################################
+def print_fasta(fasta):
+    for header in fasta:
+        print(">", header, sep="")
+        print(insert_newlines(fasta[header]))
+
+###############################################################################
+# calculate GC content of sequence - returns percentage in decimal (e.g. 0.21)
+###############################################################################    
+def calc_gc(seq):
+    useq = seq.upper()
+    g = useq.count('G')
+    c = useq.count('C')
+    a = useq.count('A')
+    t = useq.count('T')
+    if g + c + a + t > 0: 
+        perc_gc = (g + c) / (g + c + a + t)
+    else:
+        perc_gc = 0
+    return(perc_gc)
+
+###############################################################################
+# Print table of GC content
+###############################################################################
+def print_gc_table(fasta):
+    print("seq_id\tseq_gc")
+
+    for header in fasta:
+        gc = calc_gc(fasta[header]) * 100 
+        print(header, "\t%0.2f" % gc)
+
+###############################################################################
+### Get command-line arguments using argparse
+###############################################################################
+def get_args():
+    parser = argparse.ArgumentParser(description="Manipulate FASTA Files")
+    parser.add_argument('--file', type = argparse.FileType('r'), default = sys.stdin, help = 'Input FASTA - defaults to STDIN')
+    subparsers = parser.add_subparsers(help='sub-command help') 
+
+    # create the parser for the "stats" command
+    subparsers.add_parser('stats', help='stats help', action="store_true")
+
+    # create the parser for the "filter" command
+    parser_filter = subparsers.add_parser('filter', help='filter help')
+    parser_filter.add_argument('--len_min', type = int, default = '0', help = 'Minimum sequence length to retain')
+    parser_filter.add_argument('--len_max', type = int, default = '10000000', help = 'Maximum sequence length to retain')
+    parser_filter.add_argument('--gc_min', type = int, default = '0', help = 'Minimum sequence GC percentage to retain (20 = .20)')
+    parser_filter.add_argument('--gc_max', type = int, default = '100', help = 'Maximum sequence GC percentage to retain (60 = .60)')
+
+    # create the parser for the "table" command
+    parser_table = subparsers.add_parser('table', help='table help')
+    table_group = parser_table.add_mutually_exclusive_group()
+    table_group.add_argument('--gc',  help = 'Output Table of GC Content', action="store_true")
+    table_group.add_argument('--len', help = 'Output Table of Sequence Length', action="store_true")
+    table_group.add_argument('--seq', help = 'Output Table of Sequences', action="store_true")
+
+    # create the parser for the "histogram" command
+    parser_hist = subparsers.add_parser('histogram', help='histogram help')
+    hist_group = parser_hist.add_mutually_exclusive_group()
+    hist_group.add_argument('--gc',  help = 'Output Table of GC Content', action="store_true")
+    hist_group.add_argument('--len', help = 'Output Table of Sequence Length', action="store_true")
+
+
+    args = parser.parse_args()
+
+    return args
+
+
+
+###############################################################################
+# Run MAIN
+###############################################################################
+if __name__ == "__main__":
+    main()
