@@ -2,8 +2,7 @@
 # fasta2tab
 # print out table of sequences from FASTA file.
 # ejr: 2022-10-12
-# lmd: 2022-11-17
-from fasta_utils import *
+# lmd: 2023-02-22
 import fileinput
 import signal
 
@@ -21,6 +20,27 @@ def main():
 def print_seqtable(fasta):
     for header in fasta:
         print(header, fasta[header], sep="\t")
+
+###############################################################################
+### Read FASTA filehandle into dictionary
+###############################################################################
+def read_fasta(fh):
+    header = ""
+    fasta = {}
+
+    for line in fh:
+        line = line.rstrip()
+        # starts with handles blank lines better than line[0]
+        if (line.startswith(">")):
+            header = line[1:]
+            fasta[header] = []
+        else:
+            fasta[header].append(line)
+    # append is more efficient that string concatenation
+    for header in fasta:
+        fasta[header] = ''.join(fasta[header])
+
+    return fasta
 
 ###############################################################################
 ### RUN MAIN 
