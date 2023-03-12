@@ -10,7 +10,7 @@ import itertools
 import re
 
 def main():
-    get_args()
+    args = get_args()
     fasta = read_fasta(args.f)
     split_fasta(fasta, args.n, args.f)
 
