@@ -29,7 +29,7 @@ def split_fasta(fasta, n, infile):
     for i in range(0, n):
         fasta_part = dict(itertools.islice(fasta.items(), pos, pos + part_size))
         pos = pos + part_size
-        outfile = re.sub(r"^(.+)\.(.+)$", r"\1_" + str(i).zfill(tens) + r"\2", infile)
+        outfile = re.sub(r"^(.+)\.(.+)$", r"\1_" + str(i).zfill(tens) + r".\2", infile)
 
         print_fasta(fasta_part, outfile)
 
