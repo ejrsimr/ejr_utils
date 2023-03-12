@@ -15,21 +15,22 @@ def main():
     split_fasta(fasta, args.n, args.f)
 
 ###############################################################################
-### Read FASTA filehandle into dictionary
+### SPLIT FASTA into multiple parts
 ###############################################################################
-def split_fasta(fasta, n, infile):
+def split_fasta(fasta, parts, infile):
     # get length of fasta
     num_seqs = len(fasta)
-    part_size = math.ceil(num_seqs / n)
+    part_size = math.ceil(num_seqs / parts)
 
     # number of zeros to pad file numbers with
-    tens = math.floor(math.log10(n)) + 1
+    tens = math.floor(math.log10(parts)) + 1
 
     pos = 0
-    for i in range(0, n):
+    for part_number in range(0, parts):
         fasta_part = dict(itertools.islice(fasta.items(), pos, pos + part_size))
         pos = pos + part_size
-        outfile = re.sub(r"^(.+)\.(.+)$", r"\1_" + str(i).zfill(tens) + r".\2", infile)
+        # generate output file name from infile and part_number 
+        outfile = re.sub(r"^(.+)\.(.+)$", r"\1_" + str(part_number).zfill(tens) + r".\2", infile)
 
         print_fasta(fasta_part, outfile)
 
@@ -65,15 +66,6 @@ def insert_newlines(string, every=80):
         lines.append(string[i:i+every])
 
     return '\n'.join(lines)
-
-###############################################################################
-# Reverse Complement Sequence
-###############################################################################
-def reverse_complement(seq):
-    # complement sequence
-    bases = str.maketrans('AGCTagct','TCGAtcga')
-    # reverse sequences; return
-    return seq.translate(bases)[::-1]
 
 ###############################################################################
 # Print FASTA Dictionary as FASTA to STDOUT
