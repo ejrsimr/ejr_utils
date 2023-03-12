@@ -81,8 +81,8 @@ def reverse_complement(seq):
 def print_fasta(fasta, outfile):
     with open(outfile, 'w') as f:
         for header in fasta:
-            print(">", header, sep="", file=outfile)
-            print(insert_newlines(fasta[header]), file=outfile)
+            print(">", header, sep="", file=f)
+            print(insert_newlines(fasta[header]), file=f)
 
 ###############################################################################
 ### Get command-line arguments using argparse
