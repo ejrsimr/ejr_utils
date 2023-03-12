@@ -26,7 +26,7 @@ def split_fasta(fasta, n, infile):
     tens = math.floor(math.log10(n)) + 1
 
     pos = 0
-    for i in range(1, n):
+    for i in range(0, n):
         fasta_part = dict(itertools.islice(fasta.items(), pos, pos + part_size))
         pos = pos + part_size
         outfile = re.sub(r"^(.+)\.(.+)$", r"\1_" + i.zfill(tens) + r"\2", infile)
